@@ -77,7 +77,8 @@ func NewMemLogStore(path string, durability Level, logOutput io.Writer) (*MemLog
 		if b.log != nil {
 			start := time.Now()
 			defer func() {
-				fmt.Fprintf(b.log, "[VERB] Loading store completed: %s\n", time.Now().Sub(start).String())
+				fmt.Fprintf(b.log, "%s [VERB] store: Loading store completed: %s\n",
+					time.Now().Format("2006/01/02 15:04:05"), time.Now().Sub(start).String())
 			}()
 		}
 		num := make([]byte, 8)
@@ -221,9 +222,11 @@ func (b *MemLogStore) run() {
 				err := b.shrink()
 				if b.log != nil {
 					if err != nil {
-						fmt.Fprintf(b.log, "[WARN] Shink failed: %v\n", err)
+						fmt.Fprintf(b.log, "%s [WARN] store: Shrink failed: %v\n",
+							time.Now().Format("2006/01/02 15:04:05"), err)
 					} else {
-						fmt.Fprintf(b.log, "[VERB] Shrinking store completed: %s\n", time.Now().Sub(start).String())
+						fmt.Fprintf(b.log, "%s [VERB] store: Shrink completed: %v\n",
+							time.Now().Format("2006/01/02 15:04:05"), time.Now().Sub(start).String())
 					}
 				}
 			}
@@ -480,7 +483,8 @@ func (b *MemLogStore) DeleteRange(min, max uint64) error {
 	if b.log != nil {
 		start := time.Now()
 		defer func() {
-			fmt.Fprintf(b.log, "[VERB] Deleting range %d-%d completed: %s\n", min, max, time.Now().Sub(start).String())
+			fmt.Fprintf(b.log, "%s [VERB] store: Deleting range %d-%d completed: %s\n",
+				time.Now().Format("2006/01/02 15:04:05"), min, max, time.Now().Sub(start).String())
 		}()
 	}
 	b.mu.Lock()
