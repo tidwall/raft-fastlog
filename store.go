@@ -25,6 +25,7 @@ const (
 // An error indicating a given key does not exist
 var ErrKeyNotFound = errors.New("not found")
 var ErrClosed = errors.New("closed")
+var ErrShrinking = errors.New("shrink in progress")
 
 const minShrinkSize = 64 * 1024 * 1024
 
@@ -53,6 +54,7 @@ type MemLogStore struct {
 	limits     bool
 	min, max   uint64
 	log        io.Writer
+	shrinking  bool
 }
 
 // NewMemLogStore takes a file path and returns a connected Raft backend.
@@ -218,17 +220,7 @@ func (b *MemLogStore) run() {
 				(b.bsize > minShrinkSize && b.size > b.bsize*2)
 			b.mu.Unlock()
 			if shrink {
-				start := time.Now()
-				err := b.shrink()
-				if b.log != nil {
-					if err != nil {
-						fmt.Fprintf(b.log, "%s [WARN] store: Shrink failed: %v\n",
-							time.Now().Format("2006/01/02 15:04:05"), err)
-					} else {
-						fmt.Fprintf(b.log, "%s [VERB] store: Shrink completed: %v\n",
-							time.Now().Format("2006/01/02 15:04:05"), time.Now().Sub(start).String())
-					}
-				}
+				b.Shrink()
 			}
 			return false
 		}()
@@ -236,6 +228,33 @@ func (b *MemLogStore) run() {
 			return
 		}
 	}
+}
+
+func (b *MemLogStore) Shrink() error {
+	b.mu.Lock()
+	if b.shrinking {
+		b.mu.Unlock()
+		return ErrShrinking
+	}
+	b.shrinking = true
+	b.mu.Unlock()
+	defer func() {
+		b.mu.Lock()
+		b.shrinking = false
+		b.mu.Unlock()
+	}()
+	start := time.Now()
+	err := b.shrink()
+	if b.log != nil {
+		if err != nil {
+			fmt.Fprintf(b.log, "%s [WARN] store: Shrink failed: %v\n",
+				time.Now().Format("2006/01/02 15:04:05"), err)
+		} else {
+			fmt.Fprintf(b.log, "%s [VERB] store: Shrink completed: %v\n",
+				time.Now().Format("2006/01/02 15:04:05"), time.Now().Sub(start).String())
+		}
+	}
+	return err
 }
 
 func (b *MemLogStore) shrink() error {
