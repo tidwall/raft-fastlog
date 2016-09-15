@@ -170,7 +170,6 @@ func NewMemLogStore(path string, durability Level, log *redlog.Logger) (*MemLogS
 					delete(b.lvm, i)
 				}
 				b.limits = false
-				println("123")
 			}
 		}
 		pos, err := b.file.Seek(0, 1)
