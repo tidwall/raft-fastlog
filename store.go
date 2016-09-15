@@ -5,13 +5,13 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/hashicorp/raft"
-	"github.com/tidwall/redlog"
 )
 
 type Level int
@@ -52,11 +52,11 @@ type MemLogStore struct {
 	buf        []byte
 	limits     bool
 	min, max   uint64
-	log        *redlog.Logger
+	log        io.Writer
 }
 
 // NewMemLogStore takes a file path and returns a connected Raft backend.
-func NewMemLogStore(path string, durability Level, log *redlog.Logger) (*MemLogStore, error) {
+func NewMemLogStore(path string, durability Level, logOutput io.Writer) (*MemLogStore, error) {
 	// create the new store
 	b := &MemLogStore{
 		path:       path,
@@ -64,7 +64,7 @@ func NewMemLogStore(path string, durability Level, log *redlog.Logger) (*MemLogS
 		kvm:        make(map[string][]byte),
 		lvm:        make(map[uint64]*raft.Log),
 		limits:     true,
-		log:        log,
+		log:        logOutput,
 	}
 	// open file
 	var err error
@@ -77,7 +77,7 @@ func NewMemLogStore(path string, durability Level, log *redlog.Logger) (*MemLogS
 		if b.log != nil {
 			start := time.Now()
 			defer func() {
-				b.log.Verbosef("Loading store completed: %s", time.Now().Sub(start).String())
+				fmt.Fprintf(b.log, "[VERB] Loading store completed: %s\n", time.Now().Sub(start).String())
 			}()
 		}
 		num := make([]byte, 8)
@@ -217,10 +217,13 @@ func (b *MemLogStore) run() {
 				(b.bsize > minShrinkSize && b.size > b.bsize*2)
 			b.mu.Unlock()
 			if shrink {
+				start := time.Now()
 				err := b.shrink()
-				if err != nil {
-					if b.log != nil {
-						b.log.Warningf("shink failed: %v", err)
+				if b.log != nil {
+					if err != nil {
+						fmt.Fprintf(b.log, "[WARN] Shink failed: %v\n", err)
+					} else {
+						fmt.Fprintf(b.log, "[VERB] Shrinking store completed: %s\n", time.Now().Sub(start).String())
 					}
 				}
 			}
@@ -233,12 +236,6 @@ func (b *MemLogStore) run() {
 }
 
 func (b *MemLogStore) shrink() error {
-	if b.log != nil {
-		start := time.Now()
-		defer func() {
-			b.log.Verbosef("Shrinking store completed: %s", time.Now().Sub(start).String())
-		}()
-	}
 	var buf []byte
 	b.mu.RLock()
 	// shrink operation
@@ -483,7 +480,7 @@ func (b *MemLogStore) DeleteRange(min, max uint64) error {
 	if b.log != nil {
 		start := time.Now()
 		defer func() {
-			b.log.Verbosef("Deleting range %d-%d completed: %s", min, max, time.Now().Sub(start).String())
+			fmt.Fprintf(b.log, "[VERB] Deleting range %d-%d completed: %s\n", min, max, time.Now().Sub(start).String())
 		}()
 	}
 	b.mu.Lock()
