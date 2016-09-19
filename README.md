@@ -1,7 +1,7 @@
-raft-memlog
+raft-fastlog
 ===========
 
-This repository provides the `raftmemlog` package. 
+This repository provides the `raftfastlog` package. 
 The package exports a Raft Store which is an implementation of a
 `LogStore`, `StableStore`, and `PeerStore`.
 
@@ -13,7 +13,7 @@ This implementation is an in-memory database that persists to disk.
 RaftStore Performance Comparison
 --------------------------------
 
-MemLog (This implementation)
+FastLog (This implementation)
 ```
 BenchmarkBuntStore_FirstIndex-8    20000000           92 ns/op
 BenchmarkBuntStore_LastIndex-8     20000000           92 ns/op

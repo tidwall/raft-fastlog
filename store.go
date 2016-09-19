@@ -1,4 +1,4 @@
-package raftmemlog
+package raftfastlog
 
 import (
 	"bufio"
@@ -36,10 +36,10 @@ const (
 	cmdDeleteRange = ']' // Min+Max
 )
 
-// MemLogStore provides access to MemLogDB for Raft to store and retrieve
+// FastLogStore provides access to FastLogDB for Raft to store and retrieve
 // log entries. It also provides key/value storage, and can be used as
 // a LogStore and StableStore.
-type MemLogStore struct {
+type FastLogStore struct {
 	mu         sync.RWMutex
 	path       string
 	durability Level
@@ -57,10 +57,10 @@ type MemLogStore struct {
 	shrinking  bool
 }
 
-// NewMemLogStore takes a file path and returns a connected Raft backend.
-func NewMemLogStore(path string, durability Level, logOutput io.Writer) (*MemLogStore, error) {
+// NewFastLogStore takes a file path and returns a connected Raft backend.
+func NewFastLogStore(path string, durability Level, logOutput io.Writer) (*FastLogStore, error) {
 	// create the new store
-	b := &MemLogStore{
+	b := &FastLogStore{
 		path:       path,
 		durability: durability,
 		kvm:        make(map[string][]byte),
@@ -191,7 +191,7 @@ func NewMemLogStore(path string, durability Level, logOutput io.Writer) (*MemLog
 }
 
 // Close is used to gracefully close the DB connection.
-func (b *MemLogStore) Close() error {
+func (b *FastLogStore) Close() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.closed {
@@ -203,7 +203,7 @@ func (b *MemLogStore) Close() error {
 	return nil
 }
 
-func (b *MemLogStore) run() {
+func (b *FastLogStore) run() {
 	for {
 		time.Sleep(time.Second)
 		done := func() bool {
@@ -230,7 +230,7 @@ func (b *MemLogStore) run() {
 	}
 }
 
-func (b *MemLogStore) Shrink() error {
+func (b *FastLogStore) Shrink() error {
 	b.mu.Lock()
 	if b.shrinking {
 		b.mu.Unlock()
@@ -257,7 +257,7 @@ func (b *MemLogStore) Shrink() error {
 	return err
 }
 
-func (b *MemLogStore) shrink() error {
+func (b *FastLogStore) shrink() error {
 	var buf []byte
 	b.mu.RLock()
 	// shrink operation
@@ -377,7 +377,7 @@ func (b *MemLogStore) shrink() error {
 	return nil
 }
 
-func (b *MemLogStore) fillLimits() {
+func (b *FastLogStore) fillLimits() {
 	b.min, b.max = 0, 0
 	for idx := range b.lvm {
 		if b.min == 0 {
@@ -392,7 +392,7 @@ func (b *MemLogStore) fillLimits() {
 }
 
 // FirstIndex returns the first known index from the Raft log.
-func (b *MemLogStore) FirstIndex() (uint64, error) {
+func (b *FastLogStore) FirstIndex() (uint64, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.closed {
@@ -406,7 +406,7 @@ func (b *MemLogStore) FirstIndex() (uint64, error) {
 }
 
 // LastIndex returns the last known index from the Raft log.
-func (b *MemLogStore) LastIndex() (uint64, error) {
+func (b *FastLogStore) LastIndex() (uint64, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.closed {
@@ -419,8 +419,8 @@ func (b *MemLogStore) LastIndex() (uint64, error) {
 	return b.max, nil
 }
 
-// GetLog is used to retrieve a log from MemLogDB at a given index.
-func (b *MemLogStore) GetLog(idx uint64, log *raft.Log) error {
+// GetLog is used to retrieve a log from FastLogDB at a given index.
+func (b *FastLogStore) GetLog(idx uint64, log *raft.Log) error {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	if b.closed {
@@ -435,11 +435,11 @@ func (b *MemLogStore) GetLog(idx uint64, log *raft.Log) error {
 }
 
 // StoreLog is used to store a single raft log
-func (b *MemLogStore) StoreLog(log *raft.Log) error {
+func (b *FastLogStore) StoreLog(log *raft.Log) error {
 	return b.StoreLogs([]*raft.Log{log})
 }
 
-func (b *MemLogStore) writeBuf() error {
+func (b *FastLogStore) writeBuf() error {
 	if _, err := b.file.Write(b.buf); err != nil {
 		return err
 	}
@@ -465,7 +465,7 @@ func bufferLog(buf []byte, log *raft.Log) []byte {
 }
 
 // StoreLogs is used to store a set of raft logs
-func (b *MemLogStore) StoreLogs(logs []*raft.Log) error {
+func (b *FastLogStore) StoreLogs(logs []*raft.Log) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.closed {
@@ -498,7 +498,7 @@ func (b *MemLogStore) StoreLogs(logs []*raft.Log) error {
 }
 
 // DeleteRange is used to delete logs within a given range inclusively.
-func (b *MemLogStore) DeleteRange(min, max uint64) error {
+func (b *FastLogStore) DeleteRange(min, max uint64) error {
 	if b.log != nil {
 		start := time.Now()
 		defer func() {
@@ -540,7 +540,7 @@ func bufferSet(buf []byte, k, v []byte) []byte {
 }
 
 // Set is used to set a key/value set outside of the raft log
-func (b *MemLogStore) Set(k, v []byte) error {
+func (b *FastLogStore) Set(k, v []byte) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.closed {
@@ -556,7 +556,7 @@ func (b *MemLogStore) Set(k, v []byte) error {
 }
 
 // Get is used to retrieve a value from the k/v store by key
-func (b *MemLogStore) Get(k []byte) ([]byte, error) {
+func (b *FastLogStore) Get(k []byte) ([]byte, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	if b.closed {
@@ -569,14 +569,14 @@ func (b *MemLogStore) Get(k []byte) ([]byte, error) {
 }
 
 // SetUint64 is like Set, but handles uint64 values
-func (b *MemLogStore) SetUint64(key []byte, val uint64) error {
+func (b *FastLogStore) SetUint64(key []byte, val uint64) error {
 	data := make([]byte, 8)
 	binary.LittleEndian.PutUint64(data, val)
 	return b.Set(key, data)
 }
 
 // GetUint64 is like Get, but handles uint64 values
-func (b *MemLogStore) GetUint64(key []byte) (uint64, error) {
+func (b *FastLogStore) GetUint64(key []byte) (uint64, error) {
 	val, err := b.Get(key)
 	if err != nil {
 		return 0, err
@@ -588,7 +588,7 @@ func (b *MemLogStore) GetUint64(key []byte) (uint64, error) {
 }
 
 // Peers returns raft peers
-func (b *MemLogStore) Peers() ([]string, error) {
+func (b *FastLogStore) Peers() ([]string, error) {
 	var peers []string
 	val, err := b.Get([]byte("peers"))
 	if err != nil {
@@ -604,7 +604,7 @@ func (b *MemLogStore) Peers() ([]string, error) {
 }
 
 // SetPeers sets raft peers
-func (b *MemLogStore) SetPeers(peers []string) error {
+func (b *FastLogStore) SetPeers(peers []string) error {
 	data, err := json.Marshal(peers)
 	if err != nil {
 		return err

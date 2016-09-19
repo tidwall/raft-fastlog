@@ -1,4 +1,4 @@
-package raftmemlog
+package raftfastlog
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/raft"
 )
 
-func testMemLogStore(t testing.TB) *MemLogStore {
+func testFastLogStore(t testing.TB) *FastLogStore {
 	fh, err := ioutil.TempFile("", "bunt")
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -18,7 +18,7 @@ func testMemLogStore(t testing.TB) *MemLogStore {
 	os.Remove(fh.Name())
 
 	// Successfully creates and returns a store
-	store, err := NewMemLogStore(fh.Name(), Medium, nil)
+	store, err := NewFastLogStore(fh.Name(), Medium, nil)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -33,20 +33,20 @@ func testRaftLog(idx uint64, data string) *raft.Log {
 	}
 }
 
-func TestMemLogStore_Implements(t *testing.T) {
-	var store interface{} = &MemLogStore{}
+func TestFastLogStore_Implements(t *testing.T) {
+	var store interface{} = &FastLogStore{}
 	if _, ok := store.(raft.StableStore); !ok {
-		t.Fatalf("MemLogStore does not implement raft.StableStore")
+		t.Fatalf("FastLogStore does not implement raft.StableStore")
 	}
 	if _, ok := store.(raft.LogStore); !ok {
-		t.Fatalf("MemLogStore does not implement raft.LogStore")
+		t.Fatalf("FastLogStore does not implement raft.LogStore")
 	}
 	if _, ok := store.(raft.PeerStore); !ok {
-		t.Fatalf("MemLogStore does not implement raft.PeerStore")
+		t.Fatalf("FastLogStore does not implement raft.PeerStore")
 	}
 }
 
-func TestNewMemLogStore(t *testing.T) {
+func TestNewFastLogStore(t *testing.T) {
 	fh, err := ioutil.TempFile("", "bunt")
 	if err != nil {
 		t.Fatalf("err: %s", err)
@@ -55,7 +55,7 @@ func TestNewMemLogStore(t *testing.T) {
 	defer os.Remove(fh.Name())
 
 	// Successfully creates and returns a store
-	store, err := NewMemLogStore(fh.Name(), High, nil)
+	store, err := NewFastLogStore(fh.Name(), High, nil)
 	if err != nil {
 		t.Fatalf("err: %s", err)
 	}
@@ -90,8 +90,8 @@ func TestNewMemLogStore(t *testing.T) {
 	//}
 }
 
-func TestMemLogStore_Peers(t *testing.T) {
-	store := testMemLogStore(t)
+func TestFastLogStore_Peers(t *testing.T) {
+	store := testFastLogStore(t)
 	defer store.Close()
 	defer os.Remove(store.path)
 	peers, err := store.Peers()
@@ -117,8 +117,8 @@ func TestMemLogStore_Peers(t *testing.T) {
 	}
 }
 
-func TestMemLogStore_Persist(t *testing.T) {
-	store := testMemLogStore(t)
+func TestFastLogStore_Persist(t *testing.T) {
+	store := testFastLogStore(t)
 	defer store.Close()
 	defer os.Remove(store.path)
 
@@ -136,14 +136,14 @@ func TestMemLogStore_Persist(t *testing.T) {
 
 	store.Close()
 	var err error
-	store, err = NewMemLogStore(store.path, Medium, nil)
+	store, err = NewFastLogStore(store.path, Medium, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 }
-func TestMemLogStore_FirstIndex(t *testing.T) {
-	store := testMemLogStore(t)
+func TestFastLogStore_FirstIndex(t *testing.T) {
+	store := testFastLogStore(t)
 	defer store.Close()
 	defer os.Remove(store.path)
 
@@ -176,8 +176,8 @@ func TestMemLogStore_FirstIndex(t *testing.T) {
 	}
 }
 
-func TestMemLogStore_LastIndex(t *testing.T) {
-	store := testMemLogStore(t)
+func TestFastLogStore_LastIndex(t *testing.T) {
+	store := testFastLogStore(t)
 	defer store.Close()
 	defer os.Remove(store.path)
 
@@ -210,8 +210,8 @@ func TestMemLogStore_LastIndex(t *testing.T) {
 	}
 }
 
-func TestMemLogStore_GetLog(t *testing.T) {
-	store := testMemLogStore(t)
+func TestFastLogStore_GetLog(t *testing.T) {
+	store := testFastLogStore(t)
 	defer store.Close()
 	defer os.Remove(store.path)
 
@@ -241,8 +241,8 @@ func TestMemLogStore_GetLog(t *testing.T) {
 	}
 }
 
-func TestMemLogStore_SetLog(t *testing.T) {
-	store := testMemLogStore(t)
+func TestFastLogStore_SetLog(t *testing.T) {
+	store := testFastLogStore(t)
 	defer store.Close()
 	defer os.Remove(store.path)
 
@@ -269,8 +269,8 @@ func TestMemLogStore_SetLog(t *testing.T) {
 	}
 }
 
-func TestMemLogStore_SetLogs(t *testing.T) {
-	store := testMemLogStore(t)
+func TestFastLogStore_SetLogs(t *testing.T) {
+	store := testFastLogStore(t)
 	defer store.Close()
 	defer os.Remove(store.path)
 
@@ -301,8 +301,8 @@ func TestMemLogStore_SetLogs(t *testing.T) {
 	}
 }
 
-func TestMemLogStore_DeleteRange(t *testing.T) {
-	store := testMemLogStore(t)
+func TestFastLogStore_DeleteRange(t *testing.T) {
+	store := testFastLogStore(t)
 	defer store.Close()
 	defer os.Remove(store.path)
 
@@ -331,8 +331,8 @@ func TestMemLogStore_DeleteRange(t *testing.T) {
 	}
 }
 
-func TestMemLogStore_Set_Get(t *testing.T) {
-	store := testMemLogStore(t)
+func TestFastLogStore_Set_Get(t *testing.T) {
+	store := testFastLogStore(t)
 	defer store.Close()
 	defer os.Remove(store.path)
 
@@ -358,8 +358,8 @@ func TestMemLogStore_Set_Get(t *testing.T) {
 	}
 }
 
-func TestMemLogStore_SetUint64_GetUint64(t *testing.T) {
-	store := testMemLogStore(t)
+func TestFastLogStore_SetUint64_GetUint64(t *testing.T) {
+	store := testFastLogStore(t)
 	defer store.Close()
 	defer os.Remove(store.path)
 
