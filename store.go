@@ -55,6 +55,7 @@ type FastLogStore struct {
 	min, max   uint64
 	log        io.Writer
 	shrinking  bool
+	persist    bool
 }
 
 // NewFastLogStore takes a file path and returns a connected Raft backend.
@@ -67,126 +68,129 @@ func NewFastLogStore(path string, durability Level, logOutput io.Writer) (*FastL
 		lvm:        make(map[uint64]*raft.Log),
 		limits:     true,
 		log:        logOutput,
+		persist:    path != ":memory:",
 	}
-	// open file
-	var err error
-	b.file, err = os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0666)
-	if err != nil {
-		return nil, err
-	}
-	// load file
-	if err := func() error {
-		if b.log != nil {
-			start := time.Now()
-			defer func() {
-				fmt.Fprintf(b.log, "%s [VERB] store: Loading store completed: %s\n",
-					time.Now().Format("2006/01/02 15:04:05"), time.Now().Sub(start).String())
-			}()
+	if b.persist {
+		// open file
+		var err error
+		b.file, err = os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0666)
+		if err != nil {
+			return nil, err
 		}
-		num := make([]byte, 8)
-		rd := bufio.NewReader(b.file)
-		for {
-			c, err := rd.ReadByte()
-			if err != nil {
-				if err == io.EOF {
-					break
-				}
-				b.file.Close()
-				return err
+		// load file
+		if err := func() error {
+			if b.log != nil {
+				start := time.Now()
+				defer func() {
+					fmt.Fprintf(b.log, "%s [VERB] store: Loading store completed: %s\n",
+						time.Now().Format("2006/01/02 15:04:05"), time.Now().Sub(start).String())
+				}()
 			}
-			switch c {
-			default:
-				return errors.New("invalid database")
-			case cmdSet, cmdDel:
-				if _, err := io.ReadFull(rd, num); err != nil {
+			num := make([]byte, 8)
+			rd := bufio.NewReader(b.file)
+			for {
+				c, err := rd.ReadByte()
+				if err != nil {
+					if err == io.EOF {
+						break
+					}
+					b.file.Close()
 					return err
 				}
-				key := make([]byte, int(binary.LittleEndian.Uint64(num)))
-				if _, err := io.ReadFull(rd, key); err != nil {
-					return err
-				}
-				if c == cmdSet {
+				switch c {
+				default:
+					return errors.New("invalid database")
+				case cmdSet, cmdDel:
 					if _, err := io.ReadFull(rd, num); err != nil {
 						return err
 					}
-					val := make([]byte, int(binary.LittleEndian.Uint64(num)))
-					if _, err := io.ReadFull(rd, val); err != nil {
+					key := make([]byte, int(binary.LittleEndian.Uint64(num)))
+					if _, err := io.ReadFull(rd, key); err != nil {
 						return err
 					}
-					b.kvm[string(key)] = val
-				} else {
-					delete(b.kvm, string(key))
-				}
-			case cmdStoreLogs:
-				if _, err := io.ReadFull(rd, num); err != nil {
-					return err
-				}
-				count := int(binary.LittleEndian.Uint64(num))
-				for i := 0; i < count; i++ {
-					if err := func() error {
-						var log raft.Log
+					if c == cmdSet {
 						if _, err := io.ReadFull(rd, num); err != nil {
 							return err
 						}
-						log.Index = binary.LittleEndian.Uint64(num)
-						if _, err := io.ReadFull(rd, num); err != nil {
+						val := make([]byte, int(binary.LittleEndian.Uint64(num)))
+						if _, err := io.ReadFull(rd, val); err != nil {
 							return err
 						}
-						log.Term = binary.LittleEndian.Uint64(num)
-						c, err := rd.ReadByte()
-						if err != nil {
-							return err
-						}
-						log.Type = raft.LogType(c)
-						if _, err := io.ReadFull(rd, num); err != nil {
-							return err
-						}
-						log.Data = make([]byte, int(binary.LittleEndian.Uint64(num)))
-						if _, err := io.ReadFull(rd, log.Data); err != nil {
-							return err
-						}
-						if b.limits {
-							if b.min == 0 {
-								b.min, b.max = log.Index, log.Index
-							} else if log.Index < b.min {
-								b.min = log.Index
-							} else if log.Index > b.max {
-								b.max = log.Index
+						b.kvm[string(key)] = val
+					} else {
+						delete(b.kvm, string(key))
+					}
+				case cmdStoreLogs:
+					if _, err := io.ReadFull(rd, num); err != nil {
+						return err
+					}
+					count := int(binary.LittleEndian.Uint64(num))
+					for i := 0; i < count; i++ {
+						if err := func() error {
+							var log raft.Log
+							if _, err := io.ReadFull(rd, num); err != nil {
+								return err
 							}
+							log.Index = binary.LittleEndian.Uint64(num)
+							if _, err := io.ReadFull(rd, num); err != nil {
+								return err
+							}
+							log.Term = binary.LittleEndian.Uint64(num)
+							c, err := rd.ReadByte()
+							if err != nil {
+								return err
+							}
+							log.Type = raft.LogType(c)
+							if _, err := io.ReadFull(rd, num); err != nil {
+								return err
+							}
+							log.Data = make([]byte, int(binary.LittleEndian.Uint64(num)))
+							if _, err := io.ReadFull(rd, log.Data); err != nil {
+								return err
+							}
+							if b.limits {
+								if b.min == 0 {
+									b.min, b.max = log.Index, log.Index
+								} else if log.Index < b.min {
+									b.min = log.Index
+								} else if log.Index > b.max {
+									b.max = log.Index
+								}
+							}
+							b.lvm[log.Index] = &log
+							return nil
+						}(); err != nil {
+							return err
 						}
-						b.lvm[log.Index] = &log
-						return nil
-					}(); err != nil {
+					}
+				case cmdDeleteRange:
+					if _, err := io.ReadFull(rd, num); err != nil {
 						return err
 					}
+					min := binary.LittleEndian.Uint64(num)
+					if _, err := io.ReadFull(rd, num); err != nil {
+						return err
+					}
+					max := binary.LittleEndian.Uint64(num)
+					for i := min; i < max; i++ {
+						delete(b.lvm, i)
+					}
+					b.limits = false
 				}
-			case cmdDeleteRange:
-				if _, err := io.ReadFull(rd, num); err != nil {
-					return err
-				}
-				min := binary.LittleEndian.Uint64(num)
-				if _, err := io.ReadFull(rd, num); err != nil {
-					return err
-				}
-				max := binary.LittleEndian.Uint64(num)
-				for i := min; i < max; i++ {
-					delete(b.lvm, i)
-				}
-				b.limits = false
 			}
+			pos, err := b.file.Seek(0, 1)
+			if err != nil {
+				return err
+			}
+			b.bsize = int(pos)
+			b.size = int(pos)
+			return nil
+		}(); err != nil {
+			b.file.Close()
+			return nil, err
 		}
-		pos, err := b.file.Seek(0, 1)
-		if err != nil {
-			return err
-		}
-		b.bsize = int(pos)
-		b.size = int(pos)
-		return nil
-	}(); err != nil {
-		b.file.Close()
-		return nil, err
+		go b.run()
 	}
-	go b.run()
 	return b, nil
 }
 
@@ -198,8 +202,10 @@ func (b *FastLogStore) Close() error {
 		return ErrClosed
 	}
 	b.closed = true
-	b.file.Sync()
-	b.file.Close()
+	if b.persist {
+		b.file.Sync()
+		b.file.Close()
+	}
 	return nil
 }
 
@@ -232,6 +238,10 @@ func (b *FastLogStore) run() {
 
 func (b *FastLogStore) Shrink() error {
 	b.mu.Lock()
+	if !b.persist {
+		b.mu.Unlock()
+		return nil
+	}
 	if b.shrinking {
 		b.mu.Unlock()
 		return ErrShrinking
@@ -471,16 +481,18 @@ func (b *FastLogStore) StoreLogs(logs []*raft.Log) error {
 	if b.closed {
 		return ErrClosed
 	}
-	var num = make([]byte, 8)
-	b.buf = b.buf[:0]
-	b.buf = append(b.buf, cmdStoreLogs)
-	binary.LittleEndian.PutUint64(num, uint64(len(logs)))
-	b.buf = append(b.buf, num...)
-	for _, log := range logs {
-		b.buf = bufferLog(b.buf, log)
-	}
-	if err := b.writeBuf(); err != nil {
-		return err
+	if b.persist {
+		var num = make([]byte, 8)
+		b.buf = b.buf[:0]
+		b.buf = append(b.buf, cmdStoreLogs)
+		binary.LittleEndian.PutUint64(num, uint64(len(logs)))
+		b.buf = append(b.buf, num...)
+		for _, log := range logs {
+			b.buf = bufferLog(b.buf, log)
+		}
+		if err := b.writeBuf(); err != nil {
+			return err
+		}
 	}
 	for _, log := range logs {
 		b.lvm[log.Index] = log
@@ -511,15 +523,17 @@ func (b *FastLogStore) DeleteRange(min, max uint64) error {
 	if b.closed {
 		return ErrClosed
 	}
-	var num = make([]byte, 8)
-	b.buf = b.buf[:0]
-	b.buf = append(b.buf, cmdDeleteRange)
-	binary.LittleEndian.PutUint64(num, min)
-	b.buf = append(b.buf, num...)
-	binary.LittleEndian.PutUint64(num, max)
-	b.buf = append(b.buf, num...)
-	if err := b.writeBuf(); err != nil {
-		return err
+	if b.persist {
+		var num = make([]byte, 8)
+		b.buf = b.buf[:0]
+		b.buf = append(b.buf, cmdDeleteRange)
+		binary.LittleEndian.PutUint64(num, min)
+		b.buf = append(b.buf, num...)
+		binary.LittleEndian.PutUint64(num, max)
+		b.buf = append(b.buf, num...)
+		if err := b.writeBuf(); err != nil {
+			return err
+		}
 	}
 	for i := min; i <= max; i++ {
 		delete(b.lvm, i)
@@ -546,10 +560,12 @@ func (b *FastLogStore) Set(k, v []byte) error {
 	if b.closed {
 		return ErrClosed
 	}
-	b.buf = b.buf[:0]
-	b.buf = bufferSet(b.buf, k, v)
-	if err := b.writeBuf(); err != nil {
-		return err
+	if b.persist {
+		b.buf = b.buf[:0]
+		b.buf = bufferSet(b.buf, k, v)
+		if err := b.writeBuf(); err != nil {
+			return err
+		}
 	}
 	b.kvm[string(k)] = v
 	return nil
