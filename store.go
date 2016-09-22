@@ -627,13 +627,3 @@ func (b *FastLogStore) SetPeers(peers []string) error {
 	}
 	return b.Set([]byte("peers"), data)
 }
-
-// Encode writes an encoded object to a new bytes buffer
-func encodeLog(in *raft.Log) ([]byte, error) {
-	buf := make([]byte, 17+len(in.Data))
-	binary.LittleEndian.PutUint64(buf[0:8], in.Index)
-	binary.LittleEndian.PutUint64(buf[8:16], in.Term)
-	buf[16] = byte(in.Type)
-	copy(buf[17:], in.Data)
-	return buf, nil
-}
