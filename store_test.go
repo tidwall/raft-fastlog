@@ -47,9 +47,6 @@ func TestFastLogStore_Implements(t *testing.T) {
 	if _, ok := store.(raft.LogStore); !ok {
 		t.Fatalf("FastLogStore does not implement raft.LogStore")
 	}
-	if _, ok := store.(raft.PeerStore); !ok {
-		t.Fatalf("FastLogStore does not implement raft.PeerStore")
-	}
 }
 
 func TestNewFastLogStore(t *testing.T) {
