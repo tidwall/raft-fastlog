@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/hashicorp/raft"
+	"github.com/tidwall/raft"
 )
 
 func testFastLogStore(t testing.TB, inmem bool) *FastLogStore {

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hashicorp/raft"
+	"github.com/tidwall/raft"
 )
 
 type Level int
