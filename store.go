@@ -3,7 +3,6 @@ package raftfastlog
 import (
 	"bufio"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/tidwall/raft"
+	"github.com/hashicorp/raft"
 )
 
 type Level int
@@ -601,29 +600,4 @@ func (b *FastLogStore) GetUint64(key []byte) (uint64, error) {
 		return 0, errors.New("invalid number")
 	}
 	return binary.LittleEndian.Uint64(val), nil
-}
-
-// Peers returns raft peers
-func (b *FastLogStore) Peers() ([]string, error) {
-	var peers []string
-	val, err := b.Get([]byte("peers"))
-	if err != nil {
-		if err == ErrKeyNotFound {
-			return []string{}, nil
-		}
-		return nil, err
-	}
-	if err := json.Unmarshal(val, &peers); err != nil {
-		return nil, err
-	}
-	return peers, nil
-}
-
-// SetPeers sets raft peers
-func (b *FastLogStore) SetPeers(peers []string) error {
-	data, err := json.Marshal(peers)
-	if err != nil {
-		return err
-	}
-	return b.Set([]byte("peers"), data)
 }

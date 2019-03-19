@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/tidwall/raft/bench"
+	raftbench "github.com/hashicorp/raft/bench"
 )
 
 func BenchmarkFastLogStore_FirstIndex(b *testing.B) {

@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/tidwall/raft"
+	"github.com/hashicorp/raft"
 )
 
 func testFastLogStore(t testing.TB, inmem bool) *FastLogStore {
@@ -47,9 +47,6 @@ func TestFastLogStore_Implements(t *testing.T) {
 	if _, ok := store.(raft.LogStore); !ok {
 		t.Fatalf("FastLogStore does not implement raft.LogStore")
 	}
-	if _, ok := store.(raft.PeerStore); !ok {
-		t.Fatalf("FastLogStore does not implement raft.PeerStore")
-	}
 }
 
 func TestNewFastLogStore(t *testing.T) {
@@ -77,35 +74,6 @@ func TestNewFastLogStore(t *testing.T) {
 	// Close the store so we can open again
 	if err := store.Close(); err != nil {
 		t.Fatalf("err: %s", err)
-	}
-}
-
-func TestFastLogStore_Peers(t *testing.T) {
-	for p := 0; p < 2; p++ {
-		store := testFastLogStore(t, p == 1)
-		defer store.Close()
-		defer os.Remove(store.path)
-		peers, err := store.Peers()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(peers) != 0 {
-			t.Fatalf("expected '%v', got '%v'", 0, len(peers))
-		}
-		v := []string{"1", "2", "3"}
-		if err := store.SetPeers(v); err != nil {
-			t.Fatal(err)
-		}
-		peers, err = store.Peers()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(peers) != 3 {
-			t.Fatalf("expected '%v', got '%v'", 3, len(peers))
-		}
-		if peers[0] != "1" || peers[1] != "2" || peers[2] != "3" {
-			t.Fatalf("expected %v, got %v", v, peers)
-		}
 	}
 }
 
