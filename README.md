@@ -1,7 +1,4 @@
-**This project is deprecated. Please see the [tidwall/raft-wal](https://github.com/tidwall/raft-wal) project for a more advanced raft log.**
-
-raft-fastlog
-===========
+# raft-fastlog
 
 This repository provides the `raftfastlog` package. 
 The package exports a Raft Store which is an implementation of a
@@ -12,8 +9,7 @@ It is meant to be used as a backend for the `raft`
 
 This implementation is an in-memory database that persists to disk.
 
-RaftStore Performance Comparison
---------------------------------
+## RaftStore Performance Comparison
 
 FastLog (This implementation)
 ```
